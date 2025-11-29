@@ -446,25 +446,47 @@
         };
 
         try {
-            // Use the API client to create project
+            // If dev persistence is enabled, post directly to backend dev endpoint
+            if (window.DEV_PERSIST_PROJECTS && window.BACKEND_API_URL) {
+                const backendUrl = window.BACKEND_API_URL;
+                const res = await fetch(`${backendUrl}/projects/dev-create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: projectData.name,
+                        status: projectData.status,
+                        start_lat: projectData.startLat,
+                        start_lon: projectData.startLon,
+                        end_lat: projectData.endLat,
+                        end_lon: projectData.endLon,
+                        resource_allocation: projectData.resourceAllocation
+                    })
+                });
+
+                if (res.ok) {
+                    const createdProject = await res.json();
+                    if (window.showToast) window.showToast(`Project "${projectName}" created (dev) successfully.`, 'success');
+                    if (window.loadProjects) window.loadProjects();
+                    clearRoute();
+                    return;
+                } else {
+                    const errText = await res.text().catch(() => res.statusText);
+                    if (window.showToast) window.showToast(`Dev create failed: ${errText}`, 'error');
+                    return;
+                }
+            }
+
+            // Fallback: Use the internal API proxy (existing behavior)
             const response = await fetch('/api/projects', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(projectData)
             });
 
             if (response.ok) {
                 const createdProject = await response.json();
                 if (window.showToast) window.showToast(`Project "${projectName}" created successfully.`, 'success');
-
-                // Refresh projects list
-                if (window.loadProjects) {
-                    window.loadProjects();
-                }
-
-                // Clear the route
+                if (window.loadProjects) window.loadProjects();
                 clearRoute();
             } else {
                 let errorText = response.statusText;

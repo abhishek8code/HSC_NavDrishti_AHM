@@ -149,6 +149,8 @@
         window.BACKEND_API_URL = '@(ViewBag.BackendApiUrl ?? "http://localhost:8001")';
         // Disable traffic polling by default to avoid backend 404 spam; set to true to enable
         window.ENABLE_TRAFFIC_POLL = false;
+        // Enable dev persistence of projects (set to true for local testing)
+        window.DEV_PERSIST_PROJECTS = true;
         (function(){
             var projects = @((ViewBag.Projects != null) ? "true" : "false");
             if(projects === false){
