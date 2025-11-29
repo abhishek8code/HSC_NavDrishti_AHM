@@ -7,6 +7,7 @@ from Traffic_Backend.db_config import SessionLocal
 from Traffic_Backend.auth import require_role
 from sqlalchemy.orm import Session
 import networkx as nx
+import random
 
 router = APIRouter(prefix="/routes", tags=["routes"])
 
@@ -20,7 +21,35 @@ def get_db():
 
 
 class RouteAnalyzeRequest(BaseModel):
-    coordinates: List[List[float]]  # [[lon, lat], ...]
+    start_lat: float
+    start_lon: float
+    end_lat: float
+    end_lon: float
+    waypoints: Optional[List[Dict[str, float]]] = []
+
+
+class RoadProperties(BaseModel):
+    road_type: str
+    road_width_m: float
+    lanes: int
+    surface_type: str
+
+
+class TrafficCounts(BaseModel):
+    total_vehicles: int
+    two_wheeler: int
+    four_wheeler: int
+    heavy_vehicle: int
+    avg_speed_kmh: float
+
+
+class RouteAnalysisResponse(BaseModel):
+    distance_km: float
+    estimated_time_min: float
+    num_points: int
+    road_properties: RoadProperties
+    traffic_counts: TrafficCounts
+    coordinates: List[List[float]]  # Full route coordinates for display
 
 
 class RouteMetrics(BaseModel):
@@ -85,17 +114,116 @@ def _score_alternative(path: List[tuple], graph: nx.DiGraph, db: Session) -> flo
     return score
 
 
-@router.post("/analyze", response_model=RouteMetrics)
+@router.post("/analyze", response_model=RouteAnalysisResponse)
 def analyze_route(payload: RouteAnalyzeRequest, db: Session = Depends(get_db)):
-    coords = payload.coordinates
+    """
+    Analyze a route defined by start/end coordinates and optional waypoints.
+    Returns detailed road properties and traffic analysis.
+    """
+    # Build coordinate list
+    coords = [[payload.start_lon, payload.start_lat]]
+    if payload.waypoints:
+        coords.extend([[wp['lon'], wp['lat']] for wp in payload.waypoints])
+    coords.append([payload.end_lon, payload.end_lat])
+    
     if len(coords) < 2:
         raise HTTPException(status_code=400, detail="At least two coordinates required")
 
+    # Calculate distance using Shapely
     ls = LineString([(c[0], c[1]) for c in coords])
     length_deg = ls.length
-    # Approximate conversion: 1 degree ~ 111 km (at equator) -> rough estimate
-    approx_km = round(length_deg * 111, 4)
-    return RouteMetrics(length_degrees=length_deg, num_segments=len(coords)-1, approximate_length_km=approx_km)
+    # Approximate conversion: 1 degree ~ 111 km (at equator)
+    distance_km = round(length_deg * 111, 2)
+    
+    # Estimate road properties based on distance and location
+    road_props = _estimate_road_properties(distance_km, coords)
+    
+    # Estimate traffic counts (would query real traffic database in production)
+    traffic_counts = _estimate_traffic_counts(distance_km, road_props)
+    
+    # Calculate estimated travel time
+    avg_speed = traffic_counts.avg_speed_kmh
+    estimated_time_min = round((distance_km / avg_speed) * 60, 1) if avg_speed > 0 else 0
+    
+    return RouteAnalysisResponse(
+        distance_km=distance_km,
+        estimated_time_min=estimated_time_min,
+        num_points=len(coords),
+        road_properties=road_props,
+        traffic_counts=traffic_counts,
+        coordinates=coords
+    )
+
+
+def _estimate_road_properties(distance_km: float, coords: List[List[float]]) -> RoadProperties:
+    """Estimate road properties based on route characteristics."""
+    # Mock estimation - in production, query GIS database
+    
+    if distance_km > 10:
+        return RoadProperties(
+            road_type="Highway",
+            road_width_m=12.0,
+            lanes=4,
+            surface_type="Asphalt"
+        )
+    elif distance_km > 5:
+        return RoadProperties(
+            road_type="Main Road",
+            road_width_m=10.0,
+            lanes=4,
+            surface_type="Asphalt"
+        )
+    elif distance_km > 1:
+        return RoadProperties(
+            road_type="Urban Road",
+            road_width_m=7.5,
+            lanes=2,
+            surface_type="Asphalt"
+        )
+    else:
+        return RoadProperties(
+            road_type="Local Street",
+            road_width_m=5.0,
+            lanes=1,
+            surface_type="Concrete"
+        )
+
+
+def _estimate_traffic_counts(distance_km: float, road_props: RoadProperties) -> TrafficCounts:
+    """Estimate traffic vehicle counts based on road type and distance."""
+    # Mock estimation - in production, query traffic sensors/historical data
+    
+    # Base vehicles per km per hour based on road type
+    base_density = {
+        "Highway": 800,
+        "Main Road": 600,
+        "Urban Road": 400,
+        "Local Street": 200
+    }
+    
+    base = base_density.get(road_props.road_type, 400)
+    total = int(base * distance_km)
+    
+    # Distribution percentages (typical for Indian cities)
+    two_wheeler = int(total * 0.45)  # 45% two-wheelers
+    four_wheeler = int(total * 0.40)  # 40% cars
+    heavy = int(total * 0.15)  # 15% buses/trucks
+    
+    # Average speed based on road type
+    avg_speed_map = {
+        "Highway": 80.0,
+        "Main Road": 50.0,
+        "Urban Road": 35.0,
+        "Local Street": 20.0
+    }
+    
+    return TrafficCounts(
+        total_vehicles=total,
+        two_wheeler=two_wheeler,
+        four_wheeler=four_wheeler,
+        heavy_vehicle=heavy,
+        avg_speed_kmh=avg_speed_map.get(road_props.road_type, 35.0)
+    )
 
 
 @router.get("/{route_id}/metrics")
@@ -185,4 +313,38 @@ def route_recommend(route_id: int, start_lon: float, start_lat: float, end_lon: 
     justification = f"Route {best_alt.route_id} recommended: length {best_alt.length_km} km, score {best_alt.suitability_score:.4f}"
     
     return RecommendationResponse(route_id=route_id, recommended_alternative_id=best_alt.route_id, all_alternatives=alternatives, recommendation_justification=justification)
+
+
+@router.post("/recommend")
+def recommend_routes(payload: RouteAnalyzeRequest, db: Session = Depends(get_db)):
+    """
+    Lightweight recommendation endpoint that accepts the frontend payload shape
+    and returns a deterministic set of mock alternative routes for UI testing.
+    This is intended as a development stub until a production recommender is available.
+    """
+    # Build coordinate list
+    coords = [[payload.start_lon, payload.start_lat]]
+    if payload.waypoints:
+        coords.extend([[wp['lon'], wp['lat']] for wp in payload.waypoints])
+    coords.append([payload.end_lon, payload.end_lat])
+
+    # Generate simple mock alternatives by perturbing coordinates slightly
+    alts = []
+    for i in range(3):
+        factor = (i - 1) * 0.001
+        perturbed = [[c[0] + factor * (random.random() - 0.5), c[1] + factor * (random.random() - 0.5)] for c in coords]
+        ls = LineString([(c[0], c[1]) for c in perturbed])
+        dist_km = round(ls.length * 111, 4)
+        alts.append({
+            "id": f"mock-{i+1}",
+            "name": f"Alt {i+1}",
+            "coordinates": perturbed,
+            "distance_km": dist_km,
+            "travel_time_min": max(1, int(dist_km * 2)),
+            "traffic_score": round(random.random(), 3),
+            "emission_g": int(random.random() * 1000),
+            "rank": i+1
+        })
+
+    return {"routes": alts}
 
