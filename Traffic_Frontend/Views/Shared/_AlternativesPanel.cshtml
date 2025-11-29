@@ -1,0 +1,42 @@
+@* Alternatives Panel Partial *@
+<div id="alternativesPanel">
+    <div id="alternativesList" class="d-grid gap-2">
+        <div class="text-muted">Run Analyze to see alternatives.</div>
+    </div>
+</div>
+
+<script>
+    // Listen for alternatives event and render summarized cards
+    document.addEventListener('routes:alternatives', function(e) {
+        try {
+            const container = document.getElementById('alternativesList');
+            const detail = e.detail || {};
+            const alts = detail.allAlternatives || [];
+            container.innerHTML = '';
+
+            if (!alts.length) {
+                container.innerHTML = '<div class="text-muted">No alternatives found.</div>';
+                return;
+            }
+
+            alts.forEach(a => {
+                const card = document.createElement('div');
+                card.className = 'card alternative-card';
+                card.innerHTML = `
+                    <div class="card-body p-2 d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold small mb-1">${a.name || ('Alt ' + (a.rank || a.routeId || ''))}</div>
+                            <div class="small text-muted">${(a.distance_km || a.lengthKm || 0).toFixed ? ( (a.distance_km||a.lengthKm).toFixed(2) + ' km') : ''} • Rank ${a.rank || a.routeId}</div>
+                        </div>
+                        <div class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1" data-route="${a.id || a.routeId || a.rank || ''}">Select</button>
+                            <button class="btn btn-sm btn-light btn-sm details-btn" data-route="${a.id || a.routeId || a.rank || ''}">Details</button>
+                        </div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        } catch (err) { console.warn('Could not render alternatives panel', err); }
+    });
+</script>
