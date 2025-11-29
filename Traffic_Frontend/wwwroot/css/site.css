@@ -11,6 +11,12 @@ html, body {
     width: 100%;
 }
 
+/* Ensure dashboard map container expands to available column width */
+#dashboardMap {
+    width: 100% !important;
+    height: 85vh;
+}
+
 /* Pulsing animation for unstable flow (yellow lines) */
 @keyframes pulse-yellow {
     0% {
