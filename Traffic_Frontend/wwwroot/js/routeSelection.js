@@ -557,6 +557,163 @@
         }
     }
 
+    // --- Alternatives rendering ---
+    let alternativeRouteIds = [];
+
+    async function fetchAndRenderAlternatives(coordinates) {
+        const backendUrl = window.BACKEND_API_URL || 'http://localhost:8001';
+        const payload = {
+            start_lat: coordinates[0][1],
+            start_lon: coordinates[0][0],
+            end_lat: coordinates[coordinates.length - 1][1],
+            end_lon: coordinates[coordinates.length - 1][0],
+            waypoints: coordinates.slice(1, -1).map(c => ({ lat: c[1], lon: c[0] }))
+        };
+
+        try {
+            const res = await fetch(`${backendUrl}/routes/recommend`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.routes) {
+                    renderAlternativesOnMap(data.routes);
+                    dispatchAlternativesEvent(data.routes);
+                    return;
+                }
+            }
+        } catch (err) {
+            console.warn('Could not fetch /routes/recommend:', err.message);
+        }
+
+        // Fallback: generate mock alternatives by perturbing coordinates
+        const mock = generateMockAlternatives(coordinates);
+        renderAlternativesOnMap(mock);
+        dispatchAlternativesEvent(mock);
+    }
+
+    function generateMockAlternatives(coordinates) {
+        const alts = [];
+        const base = coordinates;
+        for (let i = 0; i < 3; i++) {
+            const coords = base.map(c => [c[0] + (i - 1) * 0.001 * (Math.random() * 0.5), c[1] + (i - 1) * 0.001 * (Math.random() * 0.5)]);
+            alts.push({
+                id: `mock-${i+1}`,
+                name: `Alt ${i+1}`,
+                coordinates: coords,
+                distance_km: turf.length(turf.lineString(coords), { units: 'kilometers' }),
+                travel_time_min: Math.round(turf.length(turf.lineString(coords), { units: 'kilometers' }) * 2),
+                traffic_score: Math.random(),
+                emission_g: Math.round(Math.random() * 1000),
+                rank: i+1
+            });
+        }
+        return alts;
+    }
+
+    function renderAlternativesOnMap(routes) {
+        if (!map || !map.isStyleLoaded()) return;
+
+        // Remove previous alternatives
+        alternativeRouteIds.forEach(id => {
+            try { if (map.getLayer(`${id}-line`)) map.removeLayer(`${id}-line`); } catch(e){}
+            try { if (map.getSource(id)) map.removeSource(id); } catch(e){}
+        });
+        alternativeRouteIds = [];
+
+        const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444'];
+
+        routes.forEach((r, idx) => {
+            const rid = `alt-route-${r.id || r.id}`;
+            alternativeRouteIds.push(rid);
+
+            const geojson = {
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: r.coordinates }
+            };
+
+            try {
+                if (map.getSource(rid)) {
+                    map.getSource(rid).setData(geojson);
+                } else {
+                    map.addSource(rid, { type: 'geojson', data: geojson });
+                    map.addLayer({
+                        id: `${rid}-line`,
+                        type: 'line',
+                        source: rid,
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 'line-color': colors[idx % colors.length], 'line-width': 4, 'line-opacity': 0.8 }
+                    });
+
+                    // Hover effect
+                    map.on('mouseenter', `${rid}-line`, function() { map.getCanvas().style.cursor = 'pointer'; });
+                    map.on('mouseleave', `${rid}-line`, function() { map.getCanvas().style.cursor = ''; });
+
+                    // Click to select an alternative
+                    map.on('click', `${rid}-line`, function(e) { highlightAlternative(r, rid); });
+                }
+            } catch (err) {
+                console.warn('Error rendering alternative', rid, err);
+            }
+        });
+
+        // Populate Alternatives panel via event (scenarioCompare will render)
+        dispatchAlternativesEvent(routes.map((r, i) => ({ routeId: r.id || `mock-${i+1}`, lengthKm: r.distance_km || (turf.length(turf.lineString(r.coordinates), {units: 'kilometers'})), numSegments: (r.coordinates||[]).length, suitabilityScore: r.traffic_score || 0.5, rank: r.rank || (i+1), raw: r })));
+    }
+
+    function highlightAlternative(route, rid) {
+        try {
+            // Emphasize the selected route by increasing width and opacity
+            const layerId = `${rid}-line`;
+            if (map.getLayer(layerId)) {
+                map.setPaintProperty(layerId, 'line-width', 6);
+                map.setPaintProperty(layerId, 'line-opacity', 1.0);
+            }
+
+            // Zoom to route
+            const coords = route.coordinates || (route.geometry && route.geometry.coordinates) || [];
+            if (coords.length) {
+                const bounds = coords.reduce(function(b, coord) { return b.extend(coord); }, new mapboxgl.LngLatBounds(coords[0], coords[0]));
+                map.fitBounds(bounds, { padding: 60 });
+            }
+
+            // Dispatch selection event
+            document.dispatchEvent(new CustomEvent('routes:alternativeSelected', { detail: { route: route } }));
+        } catch (err) {
+            console.warn('Could not highlight alternative:', err);
+        }
+    }
+
+    function dispatchAlternativesEvent(routes) {
+        const detail = { allAlternatives: routes, recommendedAlternativeId: routes.length ? routes[0].routeId || routes[0].id : null };
+        try { document.dispatchEvent(new CustomEvent('routes:alternatives', { detail: detail })); } catch(e){}
+    }
+
+    // Listen for clicks inside Alternatives panel (select button)
+    document.addEventListener('click', function(e) {
+        const btn = e.target.closest && e.target.closest('[data-route]');
+        if (btn && btn.dataset && btn.dataset.route) {
+            const rid = btn.dataset.route;
+            // Find matching route source id and simulate highlight
+            const matching = alternativeRouteIds.find(id => id.endsWith(rid) || id.includes(rid));
+            if (matching) {
+                // read route data from source
+                try {
+                    const src = map.getSource(matching);
+                    if (src) {
+                        const data = src._data || src._geojson || null;
+                        if (data) {
+                            highlightAlternative({ coordinates: data.geometry.coordinates }, matching);
+                        }
+                    }
+                } catch(e){ console.warn(e); }
+            }
+        }
+    });
+
     // Export functions for other modules
     window.RouteSelection = {
         getSelectedRoute: () => selectedRoute,
