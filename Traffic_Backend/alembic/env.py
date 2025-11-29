@@ -21,8 +21,8 @@ if config.config_file_name:
 
 # Import your model's MetaData object here
 # for 'autogenerate' support
-from db_config import engine as db_engine
-from models import Base
+from Traffic_Backend.db_config import engine as db_engine
+from Traffic_Backend.models import Base
 
 target_metadata = Base.metadata
 

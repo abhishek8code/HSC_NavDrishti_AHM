@@ -7,8 +7,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
-from db_config import SessionLocal
-from models import User
+from Traffic_Backend.db_config import SessionLocal
+from Traffic_Backend.models import User
 
 # Secret and algorithm
 SECRET_KEY = os.getenv("JWT_SECRET", "change_this_secret")

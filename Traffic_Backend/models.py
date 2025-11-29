@@ -58,3 +58,25 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     is_active = Column(Integer, default=1)
     roles = Column(String(255), default='')  # comma-separated roles
+
+
+class Notification(Base):
+    __tablename__ = 'notifications'
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey('projects.id'), nullable=True)
+    recipient_type = Column(String(32), nullable=False)  # 'admin' or 'public'
+    message = Column(Text, nullable=False)
+    template = Column(String(128), nullable=True)
+    timestamp = Column(DateTime, nullable=False)
+    delivery_status = Column(String(32), default='sent')
+
+
+class TrafficThreshold(Base):
+    __tablename__ = 'traffic_thresholds'
+    id = Column(Integer, primary_key=True)
+    road_segment_id = Column(Integer, ForeignKey('road_network.id'), nullable=False)
+    vehicle_count_limit = Column(Integer, nullable=True)
+    density_limit = Column(Float, nullable=True)
+    alert_type = Column(String(32), nullable=True)
+    is_active = Column(Integer, default=1)
+

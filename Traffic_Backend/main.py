@@ -180,10 +180,11 @@ async def upload_road_network(file: UploadFile = File(...), user=Depends(require
 
 
 @app.post("/ingest-damaged-roads")
-async def ingest_damaged_roads(file: UploadFile = File(...), user=Depends(get_current_user)):
+async def ingest_damaged_roads(file: UploadFile = File(...), user=Depends(require_role("admin"))):
     """
     Ingest a CSV file containing damaged roads data (Lat, Lon, Severity).
     Snaps each GPS point to the nearest road segment in the loaded network.
+    Admin-only endpoint.
     """
     global road_network_gdf
     
@@ -393,13 +394,14 @@ async def root():
 
 # auth routes are provided in the routers/auth.py router
 from .routers.auth import router as auth_router
+from .routers.routes import router as routes_router
+from .routers.traffic import router as traffic_router
+from .routers.notifications import router as notifications_router
+from .routers.users import router as users_router
 app.include_router(auth_router)
-
 app.include_router(projects_router)
-
-
-
-
-
-app.include_router(projects_router)
+app.include_router(routes_router)
+app.include_router(traffic_router)
+app.include_router(notifications_router)
+app.include_router(users_router)
 

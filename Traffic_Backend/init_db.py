@@ -11,9 +11,9 @@ this_dir = os.path.dirname(os.path.abspath(__file__))
 if this_dir not in sys.path:
     sys.path.insert(0, this_dir)
 
-from db_config import engine, SessionLocal
-from models import Base, Project, User
-from auth import create_user
+from Traffic_Backend.db_config import engine, SessionLocal
+from Traffic_Backend.models import Base, Project, User
+from Traffic_Backend.auth import create_user
 
 
 def create_tables():
