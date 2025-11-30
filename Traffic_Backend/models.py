@@ -80,3 +80,18 @@ class TrafficThreshold(Base):
     alert_type = Column(String(32), nullable=True)
     is_active = Column(Integer, default=1)
 
+
+class Vehicle(Base):
+    __tablename__ = 'vehicles'
+    id = Column(Integer, primary_key=True)
+    vehicle_id = Column(String(64), unique=True, nullable=False)
+    vehicle_type = Column(String(32), nullable=False)  # 'bus', 'truck', 'emergency', 'patrol'
+    driver_name = Column(String(128), nullable=True)
+    current_lat = Column(Float, nullable=True)
+    current_lon = Column(Float, nullable=True)
+    status = Column(String(32), default='active')  # 'active', 'idle', 'offline'
+    speed = Column(Float, nullable=True)  # km/h
+    heading = Column(Float, nullable=True)  # degrees
+    last_update = Column(DateTime, nullable=True)
+    registration_date = Column(DateTime, nullable=False)
+

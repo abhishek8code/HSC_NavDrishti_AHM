@@ -10,6 +10,30 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
 </head>
 <body>
+    @{ 
+        var ctrl = (ViewContext?.RouteData?.Values?["controller"] as string) ?? string.Empty;
+        var act = (ViewContext?.RouteData?.Values?["action"] as string) ?? string.Empty;
+        var showGlobalNav = !(string.Equals(ctrl, "Home", StringComparison.OrdinalIgnoreCase) && string.Equals(act, "Index", StringComparison.OrdinalIgnoreCase));
+    }
+    @if (showGlobalNav)
+    {
+        <nav class="navbar navbar-light bg-light border-bottom mb-3">
+            <div class="container-fluid">
+                <a class="navbar-brand" href="/">
+                    <i class="bi bi-eye-fill"></i> NavDrishti
+                </a>
+                <div class="d-flex gap-2">
+                    <a href="/Home/Dashboard" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-speedometer2"></i> Dashboard
+                    </a>
+                    <a href="/Home/ProjectCreation" class="btn btn-primary btn-sm">
+                        <i class="bi bi-diagram-3"></i> Project Creation
+                    </a>
+                </div>
+            </div>
+        </nav>
+    }
+
     <main role="main">
         @RenderBody()
     </main>

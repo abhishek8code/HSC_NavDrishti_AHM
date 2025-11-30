@@ -195,6 +195,22 @@ function initializeDashboardMap() {
         try { window.dashboardMap = map; } catch (e) { console.debug('Could not set window.dashboardMap', e); }
         try { document.dispatchEvent(new CustomEvent('dashboardMapReady', { detail: { map: map } })); } catch (e) { console.debug('Could not dispatch dashboardMapReady event', e); }
 
+        // Initialize Phase 5 modules
+        if (typeof vehicleTrackingModule !== 'undefined') {
+            vehicleTrackingModule.init(map);
+            console.log('Vehicle tracking initialized');
+        }
+        if (typeof analyticsModule !== 'undefined') {
+            analyticsModule.init(map);
+            console.log('Analytics module initialized');
+        }
+
+        // Initialize Phase 6 AI module
+        if (typeof aiModule !== 'undefined') {
+            aiModule.init(map);
+            console.log('AI predictions module initialized');
+        }
+
         // Update on-page map status badge if present
         try {
             const badge = document.getElementById('mapStatusBadge');

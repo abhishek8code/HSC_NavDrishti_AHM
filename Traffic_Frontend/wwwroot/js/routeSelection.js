@@ -610,7 +610,7 @@
                 if (data && data.routes) {
                     console.log('[RouteSelection] Rendering', data.routes.length, 'alternatives from backend');
                     renderAlternativesOnMap(data.routes);
-                    dispatchAlternativesEvent(data.routes);
+                    // Note: dispatchAlternativesEvent is called within renderAlternativesOnMap with properly mapped data
                     return;
                 }
             }
@@ -623,7 +623,7 @@
         const mock = generateMockAlternatives(coordinates);
         console.log('[RouteSelection] Generated', mock.length, 'mock alternatives');
         renderAlternativesOnMap(mock);
-        dispatchAlternativesEvent(mock);
+        // Note: dispatchAlternativesEvent is called within renderAlternativesOnMap with properly mapped data
     }
 
     function generateMockAlternatives(coordinates) {
@@ -645,46 +645,130 @@
         return alts;
     }
 
+    // Track currently selected alternative for styling
+    let selectedAltId = null;
+
     function renderAlternativesOnMap(routes) {
         if (!map || !map.isStyleLoaded()) return;
 
-        // Remove previous alternatives
+        // Remove previous alternatives (layers, sources, and markers)
         alternativeRouteIds.forEach(id => {
             try { if (map.getLayer(`${id}-line`)) map.removeLayer(`${id}-line`); } catch(e){}
+            try { if (map.getLayer(`${id}-outline`)) map.removeLayer(`${id}-outline`); } catch(e){}
+            try { if (map.getLayer(`${id}-symbol`)) map.removeLayer(`${id}-symbol`); } catch(e){}
             try { if (map.getSource(id)) map.removeSource(id); } catch(e){}
+            try { if (map.getSource(`${id}-label`)) map.removeSource(`${id}-label`); } catch(e){}
         });
+        // Remove route label markers
+        document.querySelectorAll('.route-label-marker').forEach(el => el.remove());
         alternativeRouteIds = [];
+        selectedAltId = null;
 
-        const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444'];
+        const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6'];
 
         routes.forEach((r, idx) => {
-            const rid = `alt-route-${r.id || r.id}`;
+            const rid = `alt-route-${r.id || idx + 1}`;
             alternativeRouteIds.push(rid);
 
             const geojson = {
                 type: 'Feature',
+                properties: {
+                    name: r.name || `Alt ${idx + 1}`,
+                    rank: r.rank || idx + 1,
+                    distance_km: r.distance_km,
+                    traffic_score: r.traffic_score,
+                    emission_g: r.emission_g,
+                    travel_time_min: r.travel_time_min
+                },
                 geometry: { type: 'LineString', coordinates: r.coordinates }
             };
 
+            const color = colors[idx % colors.length];
+
             try {
-                if (map.getSource(rid)) {
-                    map.getSource(rid).setData(geojson);
-                } else {
+                if (!map.getSource(rid)) {
                     map.addSource(rid, { type: 'geojson', data: geojson });
+                    
+                    // Add outline layer (for selected state and depth)
+                    map.addLayer({
+                        id: `${rid}-outline`,
+                        type: 'line',
+                        source: rid,
+                        layout: { 'line-join': 'round', 'line-cap': 'round' },
+                        paint: { 
+                            'line-color': '#ffffff',
+                            'line-width': 8,
+                            'line-opacity': 0
+                        }
+                    });
+
+                    // Add main line layer
                     map.addLayer({
                         id: `${rid}-line`,
                         type: 'line',
                         source: rid,
                         layout: { 'line-join': 'round', 'line-cap': 'round' },
-                        paint: { 'line-color': colors[idx % colors.length], 'line-width': 4, 'line-opacity': 0.8 }
+                        paint: { 
+                            'line-color': color,
+                            'line-width': 5,
+                            'line-opacity': 0.75
+                        }
                     });
 
-                    // Hover effect
-                    map.on('mouseenter', `${rid}-line`, function() { map.getCanvas().style.cursor = 'pointer'; });
-                    map.on('mouseleave', `${rid}-line`, function() { map.getCanvas().style.cursor = ''; });
+                    // Add route number label at midpoint
+                    if (r.coordinates && r.coordinates.length > 1) {
+                        const midIdx = Math.floor(r.coordinates.length / 2);
+                        const midPoint = r.coordinates[midIdx];
+                        
+                        const labelEl = document.createElement('div');
+                        labelEl.className = 'route-label-marker';
+                        labelEl.innerHTML = `<div style="
+                            background: ${color};
+                            color: white;
+                            width: 24px;
+                            height: 24px;
+                            border-radius: 50%;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-weight: bold;
+                            font-size: 12px;
+                            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                            border: 2px solid white;
+                            cursor: pointer;
+                        ">${idx + 1}</div>`;
+                        
+                        labelEl.addEventListener('click', () => highlightAlternative(r, rid));
+                        
+                        new mapboxgl.Marker({ element: labelEl })
+                            .setLngLat(midPoint)
+                            .addTo(map);
+                    }
 
-                    // Click to select an alternative
-                    map.on('click', `${rid}-line`, function(e) { highlightAlternative(r, rid); });
+                    // Hover effects
+                    map.on('mouseenter', `${rid}-line`, function() {
+                        map.getCanvas().style.cursor = 'pointer';
+                        if (selectedAltId !== rid) {
+                            map.setPaintProperty(`${rid}-line`, 'line-width', 7);
+                            map.setPaintProperty(`${rid}-line`, 'line-opacity', 0.9);
+                        }
+                    });
+                    
+                    map.on('mouseleave', `${rid}-line`, function() {
+                        map.getCanvas().style.cursor = '';
+                        if (selectedAltId !== rid) {
+                            map.setPaintProperty(`${rid}-line`, 'line-width', 5);
+                            map.setPaintProperty(`${rid}-line`, 'line-opacity', 0.75);
+                        }
+                    });
+
+                    // Click to select
+                    map.on('click', `${rid}-line`, function(e) {
+                        e.preventDefault();
+                        highlightAlternative(r, rid);
+                    });
+                } else {
+                    map.getSource(rid).setData(geojson);
                 }
             } catch (err) {
                 console.warn('Error rendering alternative', rid, err);
@@ -698,6 +782,9 @@
             name: r.name || `Alt ${i+1}`,
             distance_km: r.distance_km || (turf.length(turf.lineString(r.coordinates), {units: 'kilometers'})),
             lengthKm: r.distance_km || (turf.length(turf.lineString(r.coordinates), {units: 'kilometers'})), 
+            travel_time_min: r.travel_time_min || Math.round((r.distance_km || 0) * 2),
+            traffic_score: r.traffic_score,
+            emission_g: r.emission_g || Math.round((r.distance_km || 0) * 120),
             numSegments: (r.coordinates||[]).length, 
             suitabilityScore: r.traffic_score || 0.5, 
             rank: r.rank || (i+1), 
@@ -707,22 +794,52 @@
 
     function highlightAlternative(route, rid) {
         try {
-            // Emphasize the selected route by increasing width and opacity
-            const layerId = `${rid}-line`;
-            if (map.getLayer(layerId)) {
-                map.setPaintProperty(layerId, 'line-width', 6);
-                map.setPaintProperty(layerId, 'line-opacity', 1.0);
-            }
+            // Reset all routes to default style
+            alternativeRouteIds.forEach(id => {
+                const layerId = `${id}-line`;
+                const outlineId = `${id}-outline`;
+                if (map.getLayer(layerId)) {
+                    map.setPaintProperty(layerId, 'line-width', 5);
+                    map.setPaintProperty(layerId, 'line-opacity', 0.75);
+                }
+                if (map.getLayer(outlineId)) {
+                    map.setPaintProperty(outlineId, 'line-opacity', 0);
+                }
+            });
 
-            // Zoom to route
+            // Emphasize selected route
+            const layerId = `${rid}-line`;
+            const outlineId = `${rid}-outline`;
+            if (map.getLayer(layerId)) {
+                map.setPaintProperty(layerId, 'line-width', 8);
+                map.setPaintProperty(layerId, 'line-opacity', 1.0);
+                // Move to top
+                map.moveLayer(layerId);
+            }
+            if (map.getLayer(outlineId)) {
+                map.setPaintProperty(outlineId, 'line-opacity', 0.5);
+                map.moveLayer(outlineId, layerId);
+            }
+            
+            selectedAltId = rid;
+
+            // Zoom to route with animation
             const coords = route.coordinates || (route.geometry && route.geometry.coordinates) || [];
             if (coords.length) {
                 const bounds = coords.reduce(function(b, coord) { return b.extend(coord); }, new mapboxgl.LngLatBounds(coords[0], coords[0]));
-                map.fitBounds(bounds, { padding: 60 });
+                map.fitBounds(bounds, { padding: 80, duration: 500 });
             }
 
-            // Dispatch selection event
-            document.dispatchEvent(new CustomEvent('routes:alternativeSelected', { detail: { route: route } }));
+            // Dispatch selection event with route info
+            document.dispatchEvent(new CustomEvent('routes:alternativeSelected', { 
+                detail: { 
+                    route: {
+                        ...route,
+                        id: route.id || rid.replace('alt-route-', ''),
+                        routeId: route.id || rid.replace('alt-route-', '')
+                    }
+                } 
+            }));
         } catch (err) {
             console.warn('Could not highlight alternative:', err);
         }

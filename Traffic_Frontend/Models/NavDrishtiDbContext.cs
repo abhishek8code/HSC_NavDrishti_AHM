@@ -14,7 +14,7 @@ namespace Traffic_Frontend.Models
             {
                 // Use your connection string here
                 optionsBuilder.UseMySql(
-                    "Server=localhost;Database=navdrishti;User=root;Password=password;",
+                    "Server=localhost;Database=navdrishti;User=root;Password=AbHi!@*%12;",
                     new MySqlServerVersion(new Version(8, 0, 0))
                 );
             }

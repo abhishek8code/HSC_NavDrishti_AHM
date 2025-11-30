@@ -1,16 +1,19 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
+from urllib.parse import quote_plus
 
 MYSQL_USER = os.getenv('MYSQL_USER', 'root')
-MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'password')
+MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD', 'AbHi!@*%12')
 MYSQL_HOST = os.getenv('MYSQL_HOST', 'localhost')
 MYSQL_DB = os.getenv('MYSQL_DB', 'navdrishti')
 
 # Allow overriding full DATABASE_URL via env var for flexibility
 DATABASE_URL = os.getenv('DATABASE_URL')
 if not DATABASE_URL:
-	DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_DB}"
+	# URL-encode password to handle special characters
+	encoded_password = quote_plus(MYSQL_PASSWORD)
+	DATABASE_URL = f"mysql+pymysql://{MYSQL_USER}:{encoded_password}@{MYSQL_HOST}/{MYSQL_DB}"
 
 # Try to create engine for MySQL; if connection/auth fails, fall back to SQLite for local dev
 def _create_engine_with_fallback():
@@ -29,3 +32,12 @@ def _create_engine_with_fallback():
 
 engine = _create_engine_with_fallback()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_db():
+    """Dependency for FastAPI to get database session"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -1,18 +1,658 @@
 @{
-    ViewData["Title"] = "Space Analyzer";
+    ViewData["Title"] = "NavDrishti - Smart Traffic Management";
+    Layout = null;
 }
 
-<div class="container-fluid p-0">
-    <div id="map" style="width: 100%; height: 100vh;"></div>
-</div>
-
-@section Scripts {
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"]</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet" />
     <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css' rel='stylesheet' />
-    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js'></script>
-    <script>
-        // Pass Mapbox token from server-side to client
-        window.MAPBOX_ACCESS_TOKEN = '@ViewBag.MapboxAccessToken';
-    </script>
-    <script src="~/js/mapInitializer.js"></script>
-}
+    <style>
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            --success-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        }
 
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Navbar Styles */
+        .navbar-custom {
+            background: var(--primary-gradient);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 1rem 0;
+        }
+
+        .navbar-brand {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: white !important;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .navbar-brand i {
+            color: #ffd700;
+            margin-right: 10px;
+        }
+
+        .nav-link {
+            color: rgba(255,255,255,0.9) !important;
+            font-weight: 500;
+            margin: 0 0.5rem;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: white !important;
+            transform: translateY(-2px);
+        }
+
+        .nav-link::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            width: 0;
+            height: 2px;
+            background: white;
+            transition: all 0.3s ease;
+            transform: translateX(-50%);
+        }
+
+        .nav-link:hover::after {
+            width: 80%;
+        }
+
+        .btn-dashboard {
+            background: white;
+            color: #667eea;
+            font-weight: 600;
+            padding: 0.5rem 1.5rem;
+            border-radius: 25px;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .btn-dashboard:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(255,255,255,0.3);
+            color: #764ba2;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.95) 0%, rgba(118, 75, 162, 0.95) 100%), 
+                        url('https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=1920') center/cover;
+            min-height: 90vh;
+            display: flex;
+            align-items: center;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg width="100" height="100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="2" fill="white" opacity="0.1"/></svg>');
+            animation: float 20s linear infinite;
+        }
+
+        @@keyframes float {
+            from { transform: translateY(0); }
+            to { transform: translateY(-100px); }
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .hero-title {
+            font-size: 4rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            animation: fadeInDown 1s ease-out;
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            font-weight: 300;
+            margin-bottom: 2rem;
+            animation: fadeInUp 1s ease-out 0.3s both;
+        }
+
+        .hero-buttons {
+            animation: fadeInUp 1s ease-out 0.6s both;
+        }
+
+        @@keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @@keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-hero {
+            padding: 1rem 2.5rem;
+            font-size: 1.1rem;
+            font-weight: 600;
+            border-radius: 50px;
+            margin: 0.5rem;
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .btn-hero-primary {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 4px 15px rgba(255,255,255,0.3);
+        }
+
+        .btn-hero-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(255,255,255,0.4);
+            color: #764ba2;
+        }
+
+        .btn-hero-outline {
+            background: transparent;
+            color: white;
+            border: 2px solid white;
+        }
+
+        .btn-hero-outline:hover {
+            background: white;
+            color: #667eea;
+            transform: translateY(-3px);
+        }
+
+        /* Features Section */
+        .features-section {
+            padding: 5rem 0;
+            background: linear-gradient(180deg, #f8f9fa 0%, white 100%);
+        }
+
+        .section-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .section-subtitle {
+            font-size: 1.2rem;
+            color: #666;
+            margin-bottom: 3rem;
+        }
+
+        .feature-card {
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            height: 100%;
+            transition: all 0.3s ease;
+            border: 1px solid #e0e0e0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            border-color: #667eea;
+        }
+
+        .feature-icon {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+            color: white;
+        }
+
+        .feature-icon-1 { background: var(--primary-gradient); }
+        .feature-icon-2 { background: var(--secondary-gradient); }
+        .feature-icon-3 { background: var(--success-gradient); }
+
+        .feature-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        .feature-text {
+            color: #666;
+            line-height: 1.8;
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: var(--primary-gradient);
+            color: white;
+            padding: 4rem 0;
+        }
+
+        .stat-card {
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        /* Footer */
+        .footer {
+            background: #2c3e50;
+            color: white;
+            padding: 3rem 0 1rem;
+        }
+
+        .footer-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .footer-link {
+            color: rgba(255,255,255,0.7);
+            text-decoration: none;
+            display: block;
+            margin-bottom: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .footer-link:hover {
+            color: white;
+            padding-left: 5px;
+        }
+
+        .social-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .social-icon:hover {
+            background: white;
+            color: #667eea;
+            transform: translateY(-3px);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-custom fixed-top">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-eye-fill"></i>NavDrishti
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <li class="nav-item">
+                        <a class="nav-link" href="#home">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#features">Features</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#about">About</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#contact">Contact</a>
+                    </li>
+                    <li class="nav-item ms-3">
+                        <a href="/Home/TrafficMap" class="btn btn-dashboard">
+                            <i class="bi bi-map"></i> Traffic Map
+                        </a>
+                    </li>
+                    <li class="nav-item ms-2">
+                        <a href="/Home/Dashboard" class="btn btn-dashboard">
+                            <i class="bi bi-speedometer2"></i> Dashboard
+                        </a>
+                    </li>
+                    <li class="nav-item ms-2">
+                        <a href="/Home/ProjectCreation" class="btn btn-dashboard">
+                            <i class="bi bi-diagram-3"></i> Project Creation
+                        </a>
+                    </li>
+                    <li class="nav-item ms-2">
+                        <a href="/Home/Dashboard#insights" class="btn btn-dashboard">
+                            <i class="bi bi-bar-chart"></i> Insights
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-lg-8 hero-content">
+                    <h1 class="hero-title">NavDrishti</h1>
+                    <p class="hero-subtitle">
+                        Intelligent Traffic Management System powered by AI & Real-time Analytics
+                    </p>
+                    <div class="hero-buttons">
+                        <a href="/Home/Dashboard" class="btn btn-hero btn-hero-primary">
+                            <i class="bi bi-play-fill"></i> Launch Dashboard
+                        </a>
+                        <a href="/Home/ProjectCreation" class="btn btn-hero btn-hero-outline">
+                            <i class="bi bi-diagram-3"></i> Project Creation
+                        </a>
+                        <a href="/Home/Dashboard#insights" class="btn btn-hero btn-hero-outline">
+                            <i class="bi bi-bar-chart"></i> Insights
+                        </a>
+                        <a href="#features" class="btn btn-hero btn-hero-outline">
+                            <i class="bi bi-info-circle"></i> Learn More
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features-section">
+        <div class="container">
+            <div class="text-center mb-5">
+                <h2 class="section-title">Powerful Features</h2>
+                <p class="section-subtitle">Advanced traffic management capabilities at your fingertips</p>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-1">
+                            <i class="bi bi-robot"></i>
+                        </div>
+                        <h3 class="feature-title">AI Predictions</h3>
+                        <p class="feature-text">
+                            Machine learning-powered traffic forecasting with 85%+ accuracy. 
+                            Predict congestion, speed, and anomalies up to 24 hours in advance.
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-2">
+                            <i class="bi bi-geo-alt-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Real-time GPS Tracking</h3>
+                        <p class="feature-text">
+                            Track vehicles in real-time with WebSocket-powered live updates. 
+                            Monitor buses, trucks, emergency vehicles, and patrol units.
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-3">
+                            <i class="bi bi-graph-up-arrow"></i>
+                        </div>
+                        <h3 class="feature-title">Advanced Analytics</h3>
+                        <p class="feature-text">
+                            Historical traffic trends, speed profiles, congestion heatmaps, 
+                            and comprehensive data visualizations for informed decision-making.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-4">
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-2">
+                            <i class="bi bi-lightning-charge-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Route Optimization</h3>
+                        <p class="feature-text">
+                            AI-powered route recommendations for delivery, school buses, and emergency services. 
+                            Supports multi-stop optimization with TSP solver.
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-3">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Anomaly Detection</h3>
+                        <p class="feature-text">
+                            Automatic detection of unusual traffic patterns, incidents, and congestion. 
+                            Real-time alerts with severity classification.
+                        </p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="feature-card">
+                        <div class="feature-icon feature-icon-1">
+                            <i class="bi bi-map-fill"></i>
+                        </div>
+                        <h3 class="feature-title">Interactive Maps</h3>
+                        <p class="feature-text">
+                            Powered by Mapbox with 5+ integrated APIs: Geocoding, Isochrone, 
+                            Matrix, Map Matching, and Traffic-aware routing.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="stats-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number">6</div>
+                        <div class="stat-label">Phases Complete</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number">85%</div>
+                        <div class="stat-label">AI Accuracy</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number">24/7</div>
+                        <div class="stat-label">Real-time Monitoring</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-number">5+</div>
+                        <div class="stat-label">Mapbox APIs</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="features-section">
+        <div class="container">
+            <div class="row align-items-center">
+                <div class="col-lg-6">
+                    <h2 class="section-title">About NavDrishti</h2>
+                    <p class="feature-text mb-3">
+                        NavDrishti is an intelligent traffic management system designed for Ahmedabad, Gujarat. 
+                        The platform combines cutting-edge AI, real-time data analytics, and interactive 
+                        visualizations to provide comprehensive traffic insights.
+                    </p>
+                    <p class="feature-text mb-3">
+                        Built with modern technologies including FastAPI, ASP.NET Core, Mapbox, and Machine Learning, 
+                        NavDrishti empowers traffic authorities to make data-driven decisions, optimize routes, 
+                        and improve overall traffic flow.
+                    </p>
+                    <ul class="list-unstyled">
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> AI-powered predictions</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Real-time GPS tracking</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Historical analytics</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Route optimization</li>
+                        <li class="mb-2"><i class="bi bi-check-circle-fill text-success me-2"></i> Anomaly detection</li>
+                    </ul>
+                </div>
+                <div class="col-lg-6">
+                    <img src="https://images.unsplash.com/photo-1508881598441-324f3974994b?w=800" 
+                         alt="Smart Traffic" class="img-fluid rounded shadow-lg">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Developer Team -->
+    <section id="team" class="features-section">
+        <div class="container">
+            <div class="text-center mb-4">
+                <h2 class="section-title">Developer Team</h2>
+                <p class="section-subtitle">Team NavDrishti</p>
+            </div>
+            <div class="row justify-content-center">
+                <div class="col-lg-6">
+                    <div class="card feature-card">
+                        <div class="card-body">
+                            <ol class="mb-0">
+                                <li class="mb-2">Abhishek H. Mehta</li>
+                                <li class="mb-2">Krish K. Patel</li>
+                                <li class="mb-0">Piyush K. Ladumor</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="stats-section">
+        <div class="container text-center">
+            <h2 class="section-title text-white mb-4">Get Started Today</h2>
+            <p class="hero-subtitle mb-4">
+                Transform your traffic management with intelligent insights
+            </p>
+            <a href="/Home/Dashboard" class="btn btn-hero btn-hero-primary">
+                <i class="bi bi-speedometer2"></i> Access Dashboard
+            </a>
+            <a href="/Home/Dashboard#insights" class="btn btn-hero btn-hero-outline ms-2">
+                <i class="bi bi-bar-chart"></i> View Insights
+            </a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <h5 class="footer-title">
+                        <i class="bi bi-eye-fill text-warning me-2"></i>NavDrishti
+                    </h5>
+                    <p class="text-white-50">
+                        Intelligent Traffic Management System for smarter cities and safer roads.
+                    </p>
+                    <div class="mt-3">
+                        <a href="#" class="social-icon text-white">
+                            <i class="bi bi-facebook"></i>
+                        </a>
+                        <a href="#" class="social-icon text-white">
+                            <i class="bi bi-twitter"></i>
+                        </a>
+                        <a href="#" class="social-icon text-white">
+                            <i class="bi bi-linkedin"></i>
+                        </a>
+                        <a href="#" class="social-icon text-white">
+                            <i class="bi bi-github"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <h5 class="footer-title">Quick Links</h5>
+                    <a href="#home" class="footer-link">Home</a>
+                    <a href="#features" class="footer-link">Features</a>
+                    <a href="#about" class="footer-link">About</a>
+                    <a href="/Home/Dashboard" class="footer-link">Dashboard</a>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <h5 class="footer-title">Contact</h5>
+                    <p class="text-white-50">
+                        <i class="bi bi-geo-alt-fill me-2"></i>Ahmedabad, Gujarat<br>
+                        <i class="bi bi-envelope-fill me-2"></i>info@navdrishti.com<br>
+                        <i class="bi bi-phone-fill me-2"></i>+91 XXX XXX XXXX
+                    </p>
+                </div>
+            </div>
+            <hr class="bg-white opacity-25">
+            <div class="text-center text-white-50 py-3">
+                <p class="mb-0">&copy; 2025 NavDrishti. All rights reserved. | Built with <i class="bi bi-heart-fill text-danger"></i></p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Smooth scrolling for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+
+        // Navbar background on scroll
+        window.addEventListener('scroll', function() {
+            const navbar = document.querySelector('.navbar-custom');
+            if (window.scrollY > 50) {
+                navbar.style.background = 'linear-gradient(135deg, rgba(102, 126, 234, 0.98) 0%, rgba(118, 75, 162, 0.98) 100%)';
+            } else {
+                navbar.style.background = 'var(--primary-gradient)';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,145 @@
+@{
+    ViewData["Title"] = "Project Creation";
+}
+
+<div class="container-fluid p-3">
+    <div id="backendStatusBanner" class="alert alert-warning d-none" role="alert">
+        Backend unavailable at <code>@(ViewBag.BackendApiUrl ?? "http://localhost:8002")</code>. Some features may not load. Start the backend and retry.
+    </div>
+
+    <div class="row g-3">
+        <!-- Left: Route Selection + Projects -->
+        <div class="col-md-3">
+            <!-- Route Selection -->
+            <div class="card shadow-sm mb-3" style="min-height: 600px;">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Route Selection</h5>
+                </div>
+                <div class="card-body" style="max-height: 550px; overflow-y: auto;">
+                    <div class="d-grid gap-2 mb-3">
+                        <button id="startDrawingBtn" class="btn btn-success">
+                            <i class="bi bi-pencil"></i> Draw Route on Map
+                        </button>
+                        <button id="clickSelectBtn" class="btn btn-outline-primary">
+                            <i class="bi bi-mouse-pointer"></i> Click Select Route
+                        </button>
+                        <button id="clearRouteBtn" class="btn btn-outline-danger" disabled>
+                            <i class="bi bi-trash"></i> Clear Route
+                        </button>
+                    </div>
+
+                    <div id="routeInfoPanel" class="border rounded p-3 bg-light d-none">
+                        <h6 class="fw-bold mb-2">Route Information</h6>
+                        <div class="mb-2"><strong>Length:</strong> <span id="routeLength">-</span> km</div>
+                        <div class="mb-2"><strong>Points:</strong> <span id="routePoints">-</span></div>
+                        <div class="mb-2"><strong>Road Type:</strong> <span id="roadType">-</span></div>
+                        <div class="mb-2"><strong>Road Width:</strong> <span id="roadWidth">-</span> m</div>
+                        <div class="mb-2"><strong>Lanes:</strong> <span id="roadLanes">-</span></div>
+                        <hr>
+                        <h6 class="fw-bold mb-2">Traffic Analysis</h6>
+                        <div class="mb-2"><strong>Total Vehicles:</strong> <span id="vehicleCount">-</span></div>
+                        <div class="small">
+                            <div><strong>Two Wheeler:</strong> <span id="twoWheelerCount">-</span></div>
+                            <div><strong>Four Wheeler:</strong> <span id="fourWheelerCount">-</span></div>
+                            <div><strong>Heavy (Bus/Truck):</strong> <span id="heavyVehicleCount">-</span></div>
+                        </div>
+                        <hr>
+                        <div class="d-grid">
+                            <button id="createProjectFromRoute" class="btn btn-primary">
+                                <i class="bi bi-plus-circle"></i> Create Project
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="selectionHint" class="text-muted small mt-2">Click "Draw Route" then click points on the map to create a construction route.</div>
+                </div>
+            </div>
+
+            <!-- Projects -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-success text-white"><h5 class="mb-0">Projects</h5></div>
+                <div class="card-body">
+                    <div id="projectsList">
+                        @if (ViewBag.Projects != null && ViewBag.Projects.Count > 0)
+                        {
+                            <ul class="list-group">
+                                @foreach (var p in ViewBag.Projects)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span>@p.Name</span>
+                                        <span class="badge bg-secondary">@p.Id</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="text-muted">Loading projects...</p>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Live Map -->
+        <div class="col-md-9">
+            <div class="card shadow-sm">
+                <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Live Map</h5>
+                    <div>
+                        <span id="mapStatusBadge" class="badge bg-secondary">Map: initializing</span>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div id="dashboardMap" style="width:100%; height:80vh;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <!-- Mapbox GL JS -->
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css' rel='stylesheet' />
+
+    <!-- Mapbox GL Draw -->
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' type='text/css' />
+
+    <!-- Turf.js -->
+    <script src='https://cdn.jsdelivr.net/npm/@@turf/turf@7/turf.min.js'></script>
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+
+    <!-- API Client and helpers -->
+    <script src="~/js/apiClient.js"></script>
+    <script src="~/js/trafficLineRenderer.js?v=2"></script>
+    <script src="~/js/trafficOverlay.js?v=3"></script>
+
+    <!-- Mapbox tools -->
+    <script src="~/js/addressSearch.js?v=1"></script>
+    <script src="~/js/isochrone.js?v=1"></script>
+    <script src="~/js/travelMatrix.js?v=1"></script>
+    <script src="~/js/routeOptimizer.js?v=1"></script>
+
+    <!-- Pass tokens & backend URL -->
+    <script>
+        window.MAPBOX_ACCESS_TOKEN = '@ViewBag.MapboxAccessToken';
+        window.BACKEND_API_URL = '@(ViewBag.BackendApiUrl ?? "http://localhost:8002")';
+        window.ENABLE_TRAFFIC_POLL = false;
+        window.DEV_PERSIST_PROJECTS = true;
+        (function(){
+            var hasProjects = @((ViewBag.Projects != null) ? "true" : "false");
+            if(hasProjects === false){
+                var banner = document.getElementById('backendStatusBanner');
+                if(banner){ banner.classList.remove('d-none'); }
+            }
+        })();
+    </script>
+
+    <!-- Initialize map and route selection -->
+    <script src="~/js/dashboard.js?v=2"></script>
+    <script src="~/js/routeSelection.js?v=3"></script>
+}

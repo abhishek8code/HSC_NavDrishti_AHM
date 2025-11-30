@@ -49,6 +49,32 @@ namespace Traffic_Frontend.Controllers
             return View();
         }
 
+        public async Task<IActionResult> ProjectCreation()
+        {
+            ViewBag.MapboxAccessToken = _configuration["Mapbox:AccessToken"];
+            ViewBag.BackendApiUrl = _configuration["BackendApi:BaseUrl"] ?? "http://localhost:8000";
+
+            try
+            {
+                var projects = await _backendApiService.GetProjectsAsync();
+                ViewBag.Projects = projects ?? new List<ProjectDto>();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Failed to fetch projects for ProjectCreation: {ex.Message}");
+                ViewBag.Projects = new List<ProjectDto>();
+            }
+
+            return View();
+        }
+
+        public IActionResult TrafficMap()
+        {
+            ViewBag.MapboxAccessToken = _configuration["Mapbox:AccessToken"];
+            ViewBag.BackendApiUrl = _configuration["BackendApi:BaseUrl"] ?? "http://localhost:8000";
+            return View();
+        }
+
         public IActionResult EvidenceViewer(double? lat, double? lon)
         {
             ViewBag.Latitude = lat;

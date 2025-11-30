@@ -1,21 +1,27 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
-from fastapi.responses import JSONResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from . import db_config, models
-from .auth import get_current_user, require_role, get_db
-from sqlalchemy.orm import Session
+from .auth import require_role
 from .routers.projects import router as projects_router
 import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point, LineString
-from shapely.ops import nearest_points
-import networkx as nx
-from typing import List, Dict, Optional, Tuple
-import json
 import io
+from typing import Optional, Tuple
 from pydantic import BaseModel
+import socket
+
+# Optional heavy geo deps: import lazily/fail-soft to allow service startup
+try:
+    import geopandas as gpd  # type: ignore
+    from shapely.geometry import Point, LineString  # type: ignore
+    from shapely.ops import nearest_points  # type: ignore
+    import networkx as nx  # type: ignore
+    _GEO_DEPS_AVAILABLE = True
+except Exception:
+    gpd = None  # type: ignore
+    Point = None  # type: ignore
+    LineString = None  # type: ignore
+    nearest_points = None  # type: ignore
+    nx = None  # type: ignore
+    _GEO_DEPS_AVAILABLE = False
 
 app = FastAPI(title="Damaged Roads Service", version="1.0.0")
 
@@ -43,10 +49,43 @@ if not logger.handlers:
 @app.on_event("startup")
 async def _diagnostic_startup():
     try:
-        logger.info("Diagnostic startup: listing environment variables relevant to DB and server")
+        logger.info("Diagnostic startup: loading config and listing env vars")
         import os
+        # Load optional .env for local development
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            logger.info("Loaded .env file if present")
+        except Exception:
+            logger.info("python-dotenv not available; skipping .env load")
+
+        # Load optional appsettings.json for MAPBOX token (non-secret dev convenience)
+        try:
+            import json, pathlib
+            cfg_path = pathlib.Path(__file__).parent.parent / "Traffic_Frontend" / "appsettings.json"
+            if cfg_path.exists():
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                token = cfg.get("Mapbox", {}).get("AccessToken") or cfg.get("MAPBOX_ACCESS_TOKEN")
+                if token and not os.getenv("MAPBOX_ACCESS_TOKEN"):
+                    os.environ["MAPBOX_ACCESS_TOKEN"] = token
+                    logger.info("MAPBOX_ACCESS_TOKEN set from appsettings.json")
+            else:
+                logger.info("appsettings.json not found; skipping token load")
+        except Exception as e:
+            logger.warning(f"Could not load MAPBOX token from appsettings.json: {e}")
+
         logger.info(f"SQLALCHEMY_DATABASE_URL={os.getenv('SQLALCHEMY_DATABASE_URL')}")
         logger.info(f"DATABASE_URL={os.getenv('DATABASE_URL')}")
+        logger.info(f"MAPBOX_ACCESS_TOKEN set={'yes' if os.getenv('MAPBOX_ACCESS_TOKEN') else 'no'}")
+
+        # Check if common dev port 8002 is already occupied
+        try:
+            with socket.create_connection(("127.0.0.1", 8002), timeout=0.5):
+                logger.warning("Port 8002 appears occupied on localhost. If backend fails to start, free the port or choose another.")
+        except Exception:
+            # No listener; fine
+            pass
 
         # Try a quick DB connection test using db_config if available
         try:
@@ -56,7 +95,9 @@ async def _diagnostic_startup():
             if callable(eng):
                 e = eng()
                 with e.connect() as conn:
-                    res = conn.execute('SELECT 1')
+                    # Use SQLAlchemy text for cross-dialect safety
+                    from sqlalchemy import text
+                    conn.execute(text('SELECT 1'))
                     logger.info('DB test query OK')
             else:
                 # fallback: try SessionLocal
@@ -64,7 +105,8 @@ async def _diagnostic_startup():
                 if sess:
                     s = sess()
                     try:
-                        s.execute('SELECT 1')
+                        from sqlalchemy import text
+                        s.execute(text('SELECT 1'))
                         logger.info('DB session test OK')
                     finally:
                         s.close()
@@ -84,8 +126,8 @@ async def _diagnostic_shutdown():
         pass
 
 # Global variables to store road network data
-road_network_gdf: Optional[gpd.GeoDataFrame] = None
-road_network_graph: Optional[nx.DiGraph] = None
+road_network_gdf: Optional[object] = None
+road_network_graph: Optional[object] = None
 damaged_roads_df: Optional[pd.DataFrame] = None  # Store ingested damaged roads data
 
 # Tolerance for snapping GPS points (in degrees)
@@ -111,10 +153,10 @@ class SnappedPoint(BaseModel):
 
 
 def snap_point_to_linestring(
-    point: Point,
-    road_network: gpd.GeoDataFrame,
+    point,
+    road_network,
     tolerance: float = SNAP_TOLERANCE
-) -> Tuple[Optional[Point], float, Optional[int]]:
+) -> Tuple[Optional[object], float, Optional[int]]:
     """
     Snap a GPS point to the nearest LineString in the road network.
     
@@ -127,6 +169,9 @@ def snap_point_to_linestring(
         Tuple of (snapped_point, distance, road_segment_id)
         Returns None for snapped_point if no road is within tolerance
     """
+    if not _GEO_DEPS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Geo libraries not installed. Install geopandas, shapely, networkx.")
+
     if road_network is None or len(road_network) == 0:
         raise ValueError("Road network not loaded. Please upload a GeoJSON file first.")
     
@@ -156,7 +201,7 @@ def snap_point_to_linestring(
         return None, min_distance, None
 
 
-def initialize_networkx_graph(road_network: gpd.GeoDataFrame) -> nx.DiGraph:
+def initialize_networkx_graph(road_network) -> object:
     """
     Initialize a NetworkX DiGraph (Directed Graph) from road network GeoJSON data.
     
@@ -166,6 +211,9 @@ def initialize_networkx_graph(road_network: gpd.GeoDataFrame) -> nx.DiGraph:
     Returns:
         NetworkX DiGraph representing the road network
     """
+    if not _GEO_DEPS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Geo libraries not installed. Install geopandas, shapely, networkx.")
+
     if road_network is None or len(road_network) == 0:
         raise ValueError("Road network not loaded. Please upload a GeoJSON file first.")
     
@@ -215,7 +263,10 @@ async def upload_road_network(file: UploadFile = File(...), user=Depends(require
     """
     global road_network_gdf, road_network_graph
     
-    if not file.filename.endswith(('.geojson', '.json')):
+    if not _GEO_DEPS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Geo libraries not installed. Install geopandas, shapely, networkx.")
+
+    if not file.filename.endswith((".geojson", ".json")):
         raise HTTPException(status_code=400, detail="File must be a GeoJSON file")
     
     try:
@@ -252,6 +303,9 @@ async def ingest_damaged_roads(file: UploadFile = File(...), user=Depends(requir
     Admin-only endpoint.
     """
     global road_network_gdf
+
+    if not _GEO_DEPS_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Geo libraries not installed. Install geopandas, shapely, networkx.")
     
     if road_network_gdf is None:
         raise HTTPException(
@@ -455,6 +509,15 @@ async def root():
         }
     }
 
+@app.get("/health")
+async def health():
+    """Minimal health/status endpoint."""
+    return {
+        "ok": True,
+        "geoDepsAvailable": _GEO_DEPS_AVAILABLE,
+        "roadNetworkLoaded": bool(road_network_gdf),
+    }
+
 # Include routers
 
 # auth routes are provided in the routers/auth.py router
@@ -463,10 +526,16 @@ from .routers.routes import router as routes_router
 from .routers.traffic import router as traffic_router
 from .routers.notifications import router as notifications_router
 from .routers.users import router as users_router
+from .routers.vehicles import router as vehicles_router
+from .routers.analytics import router as analytics_router
+from .routers.ai import router as ai_router
 app.include_router(auth_router)
 app.include_router(projects_router)
 app.include_router(routes_router)
 app.include_router(traffic_router)
 app.include_router(notifications_router)
 app.include_router(users_router)
+app.include_router(vehicles_router)
+app.include_router(analytics_router)
+app.include_router(ai_router)
 

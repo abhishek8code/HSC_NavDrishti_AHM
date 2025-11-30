@@ -1,0 +1,25 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run Frontend",
+			"type": "shell",
+			"command": "dotnet run --project \"Traffic_Frontend/Traffic_Frontend.csproj\" --urls http://localhost:5000",
+			"isBackground": true
+		},
+		{
+			"label": "Run Backend (8002)",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-File",
+				".\\start_backend.ps1"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

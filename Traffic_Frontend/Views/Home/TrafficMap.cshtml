@@ -1,0 +1,275 @@
+@{
+    ViewData["Title"] = "Traffic Map";
+}
+
+<div class="container-fluid p-0">
+    <!-- Full-screen Map Container -->
+    <div id="map" style="width: 100%; height: 100vh;"></div>
+
+    <!-- Floating Control Panel -->
+    <div class="position-absolute top-0 start-0 m-3" style="z-index: 1000; width: 320px;">
+        <div class="card shadow-lg">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-map"></i> Traffic Controls
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Traffic Layer Toggle -->
+                <div class="mb-3">
+                    <h6 class="fw-bold mb-2">Traffic Layers</h6>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="trafficOverlayToggle" checked>
+                        <label class="form-check-label" for="trafficOverlayToggle">
+                            Show Traffic Density
+                        </label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="alertsToggle" checked>
+                        <label class="form-check-label" for="alertsToggle">
+                            Show Traffic Alerts
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Traffic Density Legend -->
+                <div id="trafficLegend" class="mb-3">
+                    <h6 class="fw-bold mb-2">Traffic Density</h6>
+                    <div class="d-flex align-items-center mb-1">
+                        <div style="width: 30px; height: 4px; background: #00ff00;" class="me-2"></div>
+                        <small>Low (0-30%)</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-1">
+                        <div style="width: 30px; height: 4px; background: #ffff00;" class="me-2"></div>
+                        <small>Medium (30-60%)</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-1">
+                        <div style="width: 30px; height: 4px; background: #ff8800;" class="me-2"></div>
+                        <small>High (60-85%)</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-1">
+                        <div style="width: 30px; height: 4px; background: #ff0000;" class="me-2"></div>
+                        <small>Critical (>85%)</small>
+                    </div>
+                </div>
+
+                <!-- Map Style Selector -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Map Style</label>
+                    <select id="mapStyleSelector" class="form-select form-select-sm">
+                        <option value="streets-v12" selected>Streets</option>
+                        <option value="light-v11">Light</option>
+                        <option value="dark-v11">Dark</option>
+                        <option value="satellite-streets-v12">Satellite</option>
+                    </select>
+                </div>
+
+                <!-- Refresh Button -->
+                <div class="d-grid">
+                    <button id="refreshTrafficBtn" class="btn btn-primary btn-sm">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh Traffic Data
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Traffic Stats Card -->
+        <div class="card shadow-lg mt-3">
+            <div class="card-header bg-info text-white">
+                <h6 class="mb-0">
+                    <i class="bi bi-graph-up"></i> Live Stats
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <small class="text-muted">Active Roads:</small>
+                    <strong id="activeRoadsCount">-</strong>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Avg Speed:</small>
+                    <strong id="avgSpeed">-</strong> <small>km/h</small>
+                </div>
+                <div class="mb-2">
+                    <small class="text-muted">Critical Roads:</small>
+                    <strong id="criticalRoadsCount" class="text-danger">-</strong>
+                </div>
+                <div>
+                    <small class="text-muted">Last Update:</small>
+                    <strong id="lastUpdate">-</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="position-absolute bottom-0 end-0 m-3" style="z-index: 1000;">
+        <a href="/Home/Dashboard" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v3.0.0/mapbox-gl.css' rel='stylesheet' />
+    
+    <script>
+        mapboxgl.accessToken = '@ViewBag.MapboxAccessToken';
+        const backendApiUrl = '@ViewBag.BackendApiUrl';
+
+        // Initialize map centered on Ahmedabad
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [72.5714, 23.0225],
+            zoom: 12
+        });
+
+        // Add navigation controls
+        map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+        map.addControl(new mapboxgl.FullscreenControl(), 'top-right');
+
+        let trafficData = [];
+        let alertMarkers = [];
+
+        // Load traffic data
+        async function loadTrafficData() {
+            try {
+                const response = await fetch(`${backendApiUrl}/traffic/live`);
+                if (response.ok) {
+                    const data = await response.json();
+                    trafficData = data.segments || [];
+                    updateTrafficLayer();
+                    updateStats();
+                }
+            } catch (error) {
+                console.error('Failed to load traffic data:', error);
+            }
+        }
+
+        // Update traffic layer on map
+        function updateTrafficLayer() {
+            if (!map.getSource('traffic-lines')) {
+                map.addSource('traffic-lines', {
+                    type: 'geojson',
+                    data: {
+                        type: 'FeatureCollection',
+                        features: []
+                    }
+                });
+
+                map.addLayer({
+                    id: 'traffic-layer',
+                    type: 'line',
+                    source: 'traffic-lines',
+                    layout: {
+                        'line-join': 'round',
+                        'line-cap': 'round'
+                    },
+                    paint: {
+                        'line-color': [
+                            'interpolate',
+                            ['linear'],
+                            ['get', 'congestion'],
+                            0, '#00ff00',
+                            0.3, '#ffff00',
+                            0.6, '#ff8800',
+                            0.85, '#ff0000',
+                            1.0, '#8b0000'
+                        ],
+                        'line-width': 6,
+                        'line-opacity': 0.8
+                    }
+                });
+            }
+
+            // Convert traffic data to GeoJSON features
+            const features = trafficData.map(segment => ({
+                type: 'Feature',
+                geometry: {
+                    type: 'LineString',
+                    coordinates: segment.coordinates
+                },
+                properties: {
+                    congestion: segment.congestion_level || 0,
+                    speed: segment.speed_kmh || 0,
+                    vehicleCount: segment.vehicle_count || 0,
+                    segmentId: segment.segment_id
+                }
+            }));
+
+            map.getSource('traffic-lines').setData({
+                type: 'FeatureCollection',
+                features: features
+            });
+
+            // Add click handler for road info
+            map.on('click', 'traffic-layer', (e) => {
+                const properties = e.features[0].properties;
+                const congestionPercent = (properties.congestion * 100).toFixed(1);
+                let congestionLabel = 'Low';
+                if (properties.congestion > 0.85) congestionLabel = 'Critical';
+                else if (properties.congestion > 0.6) congestionLabel = 'High';
+                else if (properties.congestion > 0.3) congestionLabel = 'Medium';
+
+                new mapboxgl.Popup()
+                    .setLngLat(e.lngLat)
+                    .setHTML(`
+                        <strong>Traffic Segment</strong><br>
+                        <strong>Congestion:</strong> ${congestionLabel} (${congestionPercent}%)<br>
+                        <strong>Speed:</strong> ${properties.speed.toFixed(1)} km/h<br>
+                        <strong>Vehicles:</strong> ${properties.vehicleCount}
+                    `)
+                    .addTo(map);
+            });
+
+            map.on('mouseenter', 'traffic-layer', () => {
+                map.getCanvas().style.cursor = 'pointer';
+            });
+
+            map.on('mouseleave', 'traffic-layer', () => {
+                map.getCanvas().style.cursor = '';
+            });
+        }
+
+        // Update statistics
+        function updateStats() {
+            document.getElementById('activeRoadsCount').textContent = trafficData.length;
+            
+            if (trafficData.length > 0) {
+                const avgSpeed = trafficData.reduce((sum, s) => sum + (s.speed_kmh || 0), 0) / trafficData.length;
+                document.getElementById('avgSpeed').textContent = avgSpeed.toFixed(1);
+                
+                const criticalRoads = trafficData.filter(s => (s.congestion_level || 0) > 0.85).length;
+                document.getElementById('criticalRoadsCount').textContent = criticalRoads;
+            }
+            
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        }
+
+        // Event handlers
+        document.getElementById('trafficOverlayToggle').addEventListener('change', (e) => {
+            map.setLayoutProperty('traffic-layer', 'visibility', e.target.checked ? 'visible' : 'none');
+        });
+
+        document.getElementById('mapStyleSelector').addEventListener('change', (e) => {
+            map.setStyle(`mapbox://styles/mapbox/${e.target.value}`);
+            // Reload layers after style change
+            map.once('style.load', () => {
+                updateTrafficLayer();
+            });
+        });
+
+        document.getElementById('refreshTrafficBtn').addEventListener('click', () => {
+            loadTrafficData();
+        });
+
+        // Initialize
+        map.on('load', () => {
+            loadTrafficData();
+            
+            // Auto-refresh every 30 seconds
+            setInterval(loadTrafficData, 30000);
+        });
+    </script>
+}

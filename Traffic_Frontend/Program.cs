@@ -21,6 +21,12 @@ builder.Services.AddHttpClient<Traffic_Frontend.Services.BackendApiService>();
 
 var app = builder.Build();
 
+// Bind URLs explicitly to improve dev startup stability
+var urls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+            ?? builder.Configuration["Urls"]
+            ?? "http://localhost:5000";
+app.Urls.Add(urls);
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -50,6 +56,7 @@ app.MapHub<Traffic_Frontend.Hubs.DashboardHub>("/dashboardHub");
 var logger = app.Services.GetService<ILogger<Program>>();
 try
 {
+    Console.WriteLine($"Starting Traffic_Frontend on {string.Join(", ", app.Urls)}");
     app.Run();
 }
 catch (Exception ex)
