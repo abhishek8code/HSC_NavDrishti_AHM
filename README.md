@@ -1,14 +1,11 @@
-<p align="center">
-  <img src="docs/navdrishti-logo.png" alt="NavDrishti Logo" width="240" />
-</p>
 
 # NavDrishti — Smart Traffic Management for Ahmedabad
 
 New Vision for Viksit Bharat. AI + real‑time analytics to predict, prevent, and manage congestion.
 
-> If the logo doesn't render, place your PNG at `docs/navdrishti-logo.png` (or update the path above).
-
 ---
+**Video Link** : https://youtu.be/cNr4Wl12kbg
+
 
 ## Table of Contents
 - Overview
