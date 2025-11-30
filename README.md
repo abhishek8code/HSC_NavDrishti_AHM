@@ -1,5 +1,5 @@
 
-# NavDrishti — Smart Traffic Management for Ahmedabad
+# NavDrishti — Smart Traffic Management 
 
 New Vision for Viksit Bharat. AI + real‑time analytics to predict, prevent, and manage congestion.
 
